@@ -4,3 +4,5 @@ python-socks
 pysocks
 telebot
 pyTelegramBotAPI
+qrcode
+asyncio
