@@ -1,73 +1,37 @@
-from telethon import TelegramClient, events
+from telethon.sync import TelegramClient
 from telethon.sessions import StringSession
-import os
-import sys
+import qrcode
+import asyncio
 
-# 1. Проверяем переменные окружения
-API_ID_ENV = os.getenv('API_ID')
-API_HASH = os.getenv('API_HASH')
-SESSION_STRING = os.getenv('SESSION_STRING')
+API_ID = 'API_ID'
+API_HASH = 'API_HASH'
 
-if not API_ID_ENV or not API_HASH:
-    print("КРИТИЧЕСКАЯ ОШИБКА: API_ID или API_HASH не заданы в переменных Railway!", file=sys.stderr)
-    sys.exit(1)
+client = TelegramClient(StringSession(), API_ID, API_HASH)
 
-if not SESSION_STRING:
-    print("КРИТИЧЕСКАЯ ОШИБКА: Переменная SESSION_STRING пустая!", file=sys.stderr)
-    sys.exit(1)
-
-try:
-    API_ID = int(API_ID_ENV.strip())
-except ValueError:
-    print(f"КРИТИЧЕСКАЯ ОШИБКА: API_ID должен быть числом, а получено: '{API_ID_ENV}'", file=sys.stderr)
-    sys.exit(1)
-
-API_HASH = API_HASH.strip()
-SESSION_STRING = SESSION_STRING.strip()
-
-SOURCE_CHANNEL = [
-    '@dt_5p', 
-    '@bin_4p', 
-    '@gate_5p',
-    '@bybit_5p',
-    '@yovssmashchat'
-]
-TARGET_CHANNEL = '@crscr1' 
-
-# Создаем клиента (импорт теперь обычный, без .sync)
-client = TelegramClient(StringSession(SESSION_STRING), API_ID, API_HASH)
-
-@client.on(events.NewMessage(chats=SOURCE_CHANNEL))
-async def forward_message(event):
-    print(f"Поймали новое сообщение! Текст: {event.raw_text}")
-    try:
-        await client.send_message(TARGET_CHANNEL, event.message)
-        print("Сообщение успешно переслано!")
-    except Exception as e:
-        print(f"Ошибка при пересылке: {e}")
-
-# Заворачиваем запуск в правильную асинхронную функцию
-async def main():
-    print("Инициализация клиента Telethon...")
-    try:
-        # Подключаемся к серверам (теперь с await)
-        await client.connect()
+async def generate_session_qr():
+    await client.connect()
+    if not await client.is_user_authorized():
+        # Запрашиваем QR-логин
+        qr_login = await client.qr_login()
         
-        # Проверяем валидность нашей сессии
-        if not await client.is_user_authorized():
-            print("КРИТИЧЕСКАЯ ОШИБКА: Предоставленная SESSION_STRING не авторизована или устарела!", file=sys.stderr)
-            sys.exit(1)
-            
-        print("Бот успешно авторизован по String Session!")
-        print("Бот запущен и слушает каналы...")
+        # Генерируем и выводим QR-код в консоль
+        qr = qrcode.QRCode()
+        qr.add_data(qr_login.url)
+        # Выводим инвертированный QR-код (для темных терминалов)
+        # Если код не читается телефоном, поменяй invert=True на invert=False
+        qr.print_ascii(invert=True)
         
-        # Запускаем бесконечное ожидание сообщений
-        await client.run_until_disconnected()
+        print("\nОткрой приложение Telegram на телефоне.")
+        print("Перейди в Настройки -> Устройства -> Подключить устройство.")
+        print("Отсканируй этот QR-код!")
         
-    except Exception as e:
-        print(f"Непредвиденная ошибка при запуске клиента: {e}", file=sys.stderr)
-        sys.exit(1)
+        # Ждем, пока пользователь отсканирует код
+        await qr_login.wait()
+        
+    print("\nАвторизация успешна! Вот твоя String Session:")
+    print("========================================")
+    print(client.session.save())
+    print("========================================")
 
-# Стандартная точка входа для запуска
-if __name__ == '__main__':
-    client.loop.run_until_complete(main())
+with client:
+    client.loop.run_until_complete(generate_session_qr())
