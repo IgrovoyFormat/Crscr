@@ -3,7 +3,7 @@ from telethon.sessions import StringSession
 import qrcode
 import asyncio
 
-API_ID = 'API_ID'
+API_ID = 29138810
 API_HASH = 'API_HASH'
 
 client = TelegramClient(StringSession(), API_ID, API_HASH)
