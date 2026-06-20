@@ -4,7 +4,7 @@ import os
 import sys
 
 # 1. Получаем данные из Railway Variables
-API_ID_ENV = os.getenv('API_ID')
+API_ID_ENV = 29138810
 API_HASH = os.getenv('API_HASH')
 SESSION_STRING = os.getenv('SESSION_STRING')
 
