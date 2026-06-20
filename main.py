@@ -16,7 +16,7 @@ if not SESSION_STRING:
     print("КРИТИЧЕСКАЯ ОШИБКА: Переменная SESSION_STRING пустая!", file=sys.stderr)
     sys.exit(1)
 
-API_ID = int(API_ID_ENV.strip())
+API_ID = 29138810
 API_HASH = API_HASH.strip()
 SESSION_STRING = SESSION_STRING.strip()
 
