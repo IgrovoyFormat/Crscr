@@ -1,0 +1,6 @@
+telethon
+socks
+python-socks
+pysocks
+telebot
+pyTelegramBotAPI
