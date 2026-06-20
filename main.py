@@ -2,9 +2,10 @@ from telethon.sync import TelegramClient, events
 from time import ctime,sleep,time
 from telethon import TelegramClient, events
 import socks
+import os
 # Укажите свои данные
-API_ID = 'API_ID'  # Замените на ваш API ID
-API_HASH = 'API_HASH'  # Замените на ваш API Hash
+API_ID = os.getenv(API_ID')  # Замените на ваш API ID
+API_HASH = os.getenv('API_HASH')  # Замените на ваш API Hash
 SOURCE_CHANNEL = ['@dt_5p', 
     '@bin_4p', 
     '@gate_5p',
