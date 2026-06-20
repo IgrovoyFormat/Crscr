@@ -1,20 +1,25 @@
 from telethon.sync import TelegramClient, events
-from time import ctime,sleep,time
-from telethon import TelegramClient, events
-import socks
+from telethon.sessions import StringSession
 import os
-# Укажите свои данные
-API_ID = os.getenv('API_ID')  # Замените на ваш API ID
-API_HASH = os.getenv('API_HASH')  # Замените на ваш API Hash
-SOURCE_CHANNEL = ['@dt_5p', 
+
+# Получаем данные из переменных окружения
+# Оборачиваем API_ID в int(), так как Telethon требует, чтобы это было число
+API_ID = int(os.getenv('API_ID'))  
+API_HASH = os.getenv('API_HASH')
+SESSION_STRING = os.getenv('SESSION_STRING')  # Наша новая переменная
+
+SOURCE_CHANNEL = [
+    '@dt_5p', 
     '@bin_4p', 
     '@gate_5p',
-    '@bybit_5p','@yovssmashchat']
-# Замените на @username или ID канала X
-TARGET_CHANNEL = '@crscr1'  # Замените на @username или ID канала Y
-# Создаем клиента
+    '@42777',
+    '@yovssmashchat'
+]
 
-client = TelegramClient('session_name1', API_ID, API_HASH)
+TARGET_CHANNEL = '@crscr1' 
+
+# Создаем клиента с использованием StringSession
+client = TelegramClient(StringSession(SESSION_STRING), API_ID, API_HASH)
 
 @client.on(events.NewMessage(chats=SOURCE_CHANNEL))
 async def forward_message(event):
@@ -30,5 +35,6 @@ async def forward_message(event):
         print(f"Ошибка при пересылке: {e}")
 
 print("Бот запущен...")
+# При запуске теперь не будет требоваться ввод, так как данные есть в SESSION_STRING
 client.start()
 client.run_until_disconnected()
