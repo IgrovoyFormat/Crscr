@@ -36,6 +36,8 @@ SOURCE_TOPICS = [7974, 20903, 7978, 7976, 7970, 7964, 23111, 12, 2134, 8332]
 TARGET_CHAT_ID = -1004434633503 
 TARGET_TOPIC_ID = 2  # Цифра после последнего слеша
 
+client = TelegramClient(StringSession(SESSION_STRING), API_ID, API_HASH)
+
 @client.on(events.NewMessage(chats=SOURCE_CHANNELS))
 async def forward_message(event):
     # Проверяем, из нужного ли топика пришло сообщение (если это форум)
