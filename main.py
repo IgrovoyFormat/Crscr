@@ -131,20 +131,27 @@ client = TelegramClient(StringSession(SESSION_STRING), API_ID, API_HASH)
 
 @client.on(events.NewMessage(chats=SOURCE_CHANNELS))
 async def forward_message(event):
-    # Получаем юзернейм канала (в нижнем регистре, без @ для надежности)
+    # 1. Получаем юзернейм
     sender = getattr(event.chat, 'username', '')
     if sender:
         sender = sender.lower()
         
-    # Узнаем ID топика, из которого пришло сообщение (если это форум)
+    # 2. Узнаем ID топика
     incoming_topic = getattr(event.message, 'reply_to_msg_id', None)
     
-    destination_topic = None
-    needs_cleaning = False  # Флаг: нужно ли удалять ссылки и хэштеги
+    # --- БЛОК ДИАГНОСТИКИ (Выводит в логи Railway всё, что видит бот) ---
+    print("=========================================")
+    print("🔔 ПОЙМАЛИ КАКОЕ-ТО СООБЩЕНИЕ!")
+    print(f"Имя канала (sender): '{sender}'")
+    print(f"ID чата: {event.chat_id}")
+    print(f"ID топика: {incoming_topic}")
+    print("=========================================")
+    # -------------------------------------------------------------------
 
-    # --- 3. ЛОГИКА МАРШРУТИЗАЦИИ ---
-    
-    # А) Сначала проверяем топики из конкретных каналов-форумов
+    destination_topic = None
+    needs_cleaning = False
+
+    # А) Проверяем форумы
     if sender == 'uainvest_scanner' and incoming_topic == 8332:
         destination_topic = 180
     elif sender == 'uainvest_scanner' and incoming_topic == 23111:
@@ -153,12 +160,12 @@ async def forward_message(event):
         destination_topic = 155
     elif sender == 'arbionalerts' and incoming_topic == 7976:
         destination_topic = 158
-        needs_cleaning = True  # Включаем очистку
+        needs_cleaning = True
     elif sender == 'arbionalerts' and incoming_topic == 7966:
         destination_topic = 155
-        needs_cleaning = True  # Включаем очистку
+        needs_cleaning = True
 
-    # Б) Затем проверяем целые каналы (обычные, не форумы)
+    # Б) Проверяем обычные каналы
     elif sender in ['dt_50p', 'hl_50p', 'g_50p', 'aster_50p', 'bingx_50p', 'okx_50p']:
         destination_topic = 211
     elif sender == 'hl_11p':
@@ -174,9 +181,27 @@ async def forward_message(event):
     elif sender in ['bybit_5p', 'bb_10p']:
         destination_topic = 184
 
-    # Если сообщение пришло из канала/топика, которого нет в наших правилах выше — игнорируем
     if destination_topic is None:
+        print("❌ Сообщение проигнорировано (не подошло под правила).")
         return
+
+    print(f"✅ Правило сработало! Отправляем в топик {destination_topic}...")
+    
+    try:
+        if needs_cleaning:
+            text = event.text or ""
+            if text:
+                text = re.sub(r'https?://\S+', '', text) 
+                text = text.replace('#', '')             
+                text = text.strip()
+            
+            await client.send_message(entity=TARGET_CHAT_ID, message=text, reply_to=destination_topic, file=event.media)
+        else:
+            await client.send_message(entity=TARGET_CHAT_ID, message=event.message, reply_to=destination_topic)
+            
+        print("Успешно отправлено!")
+    except Exception as e:
+        print(f"Ошибка при отправке: {e}")
 
     # --- 4. ОБРАБОТКА И ОТПРАВКА ---
     print(f"Поймали сообщение от {sender} (топик {incoming_topic}). Отправляем в топик {destination_topic}...")
