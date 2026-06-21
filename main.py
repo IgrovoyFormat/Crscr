@@ -21,13 +21,19 @@ API_HASH = API_HASH.strip()
 SESSION_STRING = SESSION_STRING.strip()
 
 SOURCE_CHANNEL = [
-    '@dt_5p', 
-    '@bin_4p', 
-    '@gate_5p',
-    '@bybit_5p',
+    '@arbionalerts/7974', 
+    '@arbionalerts/20903', 
+    '@arbionalerts/7978',
+    '@arbionalerts/7976',
+    '@arbionalerts/7970'
+    '@arbionalerts/7964'
+    '@uainvest_scanner/23111'
+    '@uainvest_scanner/12'
+    '@uainvest_scanner/2134'
+    '@uainvest_scanner/8332'
     '@yovssmashchat'
 ]
-TARGET_CHANNEL = '@crscr1' 
+TARGET_CHANNEL = '@c/4434633503/2' 
 
 # 2. Создаем клиента
 client = TelegramClient(StringSession(SESSION_STRING), API_ID, API_HASH)
