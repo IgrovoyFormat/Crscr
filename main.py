@@ -1,4 +1,4 @@
-'''from telethon import TelegramClient, events
+from telethon import TelegramClient, events
 from telethon.sessions import StringSession
 import os
 import sys
@@ -13,8 +13,6 @@ API_ID = 29138810
 API_HASH = API_HASH.strip()
 SESSION_STRING = SESSION_STRING.strip()
 
-# --- 2. Настройка каналов и топиков ---
-# Список каналов, которые мы слушаем
 SOURCE_CHANNELS = [
     '@arbionalerts', '@uainvest_scanner', '@bin_4p', '@tracervarikteat', 
     '@bybit_5p', 
