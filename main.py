@@ -117,7 +117,7 @@ SESSION_STRING = SESSION_STRING.strip()
 SOURCE_CHANNELS = [
     '@arbionalerts', '@uainvest_scanner', '@bin_4p', '@tracervarikteat', 
     '@bybit_5p', 
-    '@dt_5pf',  # ВАЖНО: Замените на реальный ID канала @dt_5pf
+    '@mexc_5pf',  # ВАЖНО: Замените на реальный ID канала @dt_5pf
     '@gate_5p', 
     '@dt_12pf',  # ВАЖНО: Замените на реальный ID канала @dt_12pf
     '@g_12p', '@bin_9p', '@hl_11p', '@bb_10p', '@okx_12p', '@bin_22p', 
@@ -179,7 +179,7 @@ async def forward_message(event):
         
     # В) Проверяем приватные каналы по их числовому ID
     # ВАЖНО: Здесь тоже замените ID на ваши реальные!
-    elif chat_id in ['dt_12pf', 'dt_5pf']: # Это ваши dt_5pf и dt_12pf
+    elif chat_id in ['dt_12pf', 'mexc_5pf']: # Это ваши dt_5pf и dt_12pf
         destination_topic = 188
 
     # Если сообщение не подошло ни под одно правило — игнорируем
@@ -193,7 +193,7 @@ async def forward_message(event):
         if needs_cleaning:
             text = event.text or ""
             if text:
-                text = re.sub(r'https?://\S+', '', text) # Удаляем ссылки
+                text = re.sub('https?://\\\\S+', '', text) # Удаляем ссылки
                 text = text.replace('#', '')             # Удаляем решетки
                 text = text.strip()
             
