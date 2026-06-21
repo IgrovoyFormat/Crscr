@@ -16,9 +16,9 @@ SESSION_STRING = SESSION_STRING.strip()
 SOURCE_CHANNELS = [
     '@arbionalerts', '@uainvest_scanner', '@bin_4p', '@tracervarikteat', 
     '@bybit_5p', 
-    -1001234567890,  # ВАЖНО: Замените на реальный ID приватного канала @dt_5pf
+    '@mexc_5pf',  # ВАЖНО: Замените на реальный ID приватного канала @dt_5pf
     '@gate_5p', 
-    -1009876543210,  # ВАЖНО: Замените на реальный ID приватного канала @dt_12pf
+    '@mexc_12pf',  # ВАЖНО: Замените на реальный ID приватного канала @dt_12pf
     '@g_12p', '@bin_9p', '@hl_11p', '@bb_10p', '@okx_12p', '@bin_22p', 
     '@gate_8p', '@dt_50p', '@hl_50p', '@g_50p', '@aster_50p', 
     '@bingx_50p', '@okx_50p'
@@ -70,7 +70,7 @@ async def forward_message(event):
     elif sender in ['bin_4p', 'bin_9p']:
         destination_topic = 1
         
-    elif chat_id in [-1001234567890, -1009876543210]: 
+    elif chat_id in ['mexc_5pf', 'mexc_12pf']: 
         destination_topic = 188
 
     if destination_topic is None:
