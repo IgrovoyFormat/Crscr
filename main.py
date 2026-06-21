@@ -16,9 +16,9 @@ SESSION_STRING = SESSION_STRING.strip()
 SOURCE_CHANNELS = [
     '@arbionalerts', '@uainvest_scanner', '@bin_4p', '@tracervarikteat', 
     '@bybit_5p', 
-    '@mexc_12pf',  # ВАЖНО: Замените на реальный ID канала @dt_5pf
+    -1001234567890,  # ВАЖНО: Замените на реальный ID приватного канала @dt_5pf
     '@gate_5p', 
-    '@mexc_5pf',  # ВАЖНО: Замените на реальный ID канала @dt_12pf
+    -1009876543210,  # ВАЖНО: Замените на реальный ID приватного канала @dt_12pf
     '@g_12p', '@bin_9p', '@hl_11p', '@bb_10p', '@okx_12p', '@bin_22p', 
     '@gate_8p', '@dt_50p', '@hl_50p', '@g_50p', '@aster_50p', 
     '@bingx_50p', '@okx_50p'
@@ -26,7 +26,6 @@ SOURCE_CHANNELS = [
 
 TARGET_CHAT_ID = -1004434633503 
 
-# Создаем клиента Telethon
 client = TelegramClient(StringSession(SESSION_STRING), API_ID, API_HASH)
 
 @client.on(events.NewMessage(chats=SOURCE_CHANNELS))
@@ -39,7 +38,7 @@ async def forward_message(event):
     incoming_topic = getattr(event.message, 'reply_to_msg_id', None)
     
     destination_topic = None
-    needs_cleaning = False  
+    needs_strict_cleaning = False  # Флаг полного удаления любых ссылок (для arbionalerts)
 
     # --- 3. ЛОГИКА МАРШРУТИЗАЦИИ ---
     
@@ -51,10 +50,10 @@ async def forward_message(event):
         destination_topic = 155
     elif sender == 'arbionalerts' and incoming_topic == 7976:
         destination_topic = 158
-        needs_cleaning = True  
+        needs_strict_cleaning = True  
     elif sender == 'arbionalerts' and incoming_topic == 7966:
         destination_topic = 155
-        needs_cleaning = True  
+        needs_strict_cleaning = True  
 
     elif sender in ['dt_50p', 'hl_50p', 'g_50p', 'aster_50p', 'bingx_50p', 'okx_50p']:
         destination_topic = 211
@@ -71,7 +70,7 @@ async def forward_message(event):
     elif sender in ['bin_4p', 'bin_9p']:
         destination_topic = 1
         
-    elif chat_id in ['mexc_5pf', 'mexc_12pf']: 
+    elif chat_id in [-1001234567890, -1009876543210]: 
         destination_topic = 188
 
     if destination_topic is None:
@@ -81,38 +80,36 @@ async def forward_message(event):
     print(f"Поймали сообщение от {sender or chat_id} (топик {incoming_topic}). Отправляем в топик {destination_topic}...")
     
     try:
-        if needs_cleaning:
-            text = event.text or ""
-            if text:
-                # 1. Удаляем слова Scanner: и Trader: (независимо от больших/маленьких букв)
-                text = re.sub(r'(?i)Scanner:|Trader:', '', text)
-                
-                # 2. Удаляем ЛЮБЫЕ ссылки (включая t.me, http://, https://)
-                text = re.sub(r'https?://[^\s]+', '', text) 
-                
-                # 3. Удаляем символ решетки #
-                text = text.replace('#', '')             
-                
-                # 4. Наводим красоту: убираем пустые "дыры" в тексте, оставшиеся после удаления ссылок
-                text = re.sub(r'^[ \t]+$', '', text, flags=re.MULTILINE) # стираем пробелы на пустых строках
-                text = re.sub(r'\n{3,}', '\n\n', text) # сжимаем лишние переносы строк в один абзац
-                text = text.strip()
+        # Извлекаем голый текст. Это автоматически УНИЧТОЖАЕТ все скрытые гиперссылки!
+        text = event.text or ""
+        
+        if text:
+            # 1. Удаляем мусорные слова из ВСЕХ каналов
+            text = re.sub(r'(?i)(Scanner:|Trader:|Dolbaeb Trade)', '', text)
             
-            await client.send_message(
-                entity=TARGET_CHAT_ID, 
-                message=text, 
-                reply_to=destination_topic,
-                file=event.media 
-            )
-            print("Успешно очищено (без ссылок и слов Scanner/Trader) и отправлено!")
+            # 2. Удаляем любые ссылки на Telegram (t.me/...) из ВСЕХ каналов
+            text = re.sub(r'(https?://)?(www\.)?t\.me/[^\s]+', '', text)
             
-        else:
-            await client.send_message(
-                entity=TARGET_CHAT_ID, 
-                message=event.message, 
-                reply_to=destination_topic
-            )
-            print("Успешно отправлено без изменений!")
+            # 3. Если это arbionalerts — удаляем вообще ВСЕ ссылки
+            if needs_strict_cleaning:
+                text = re.sub(r'https?://[^\s]+', '', text)
+            
+            # 4. Удаляем символы решетки
+            text = text.replace('#', '')             
+            
+            # 5. Убираем лишние пробелы и пустые абзацы, оставшиеся после очистки
+            text = re.sub(r'^[ \t]+$', '', text, flags=re.MULTILINE)
+            text = re.sub(r'\n{3,}', '\n\n', text)
+            text = text.strip()
+        
+        # Отправляем очищенный текст в нужный топик
+        await client.send_message(
+            entity=TARGET_CHAT_ID, 
+            message=text, 
+            reply_to=destination_topic,
+            file=event.media 
+        )
+        print("Успешно очищено и отправлено!")
             
     except Exception as e:
         print(f"Ошибка при отправке сообщения: {e}")
@@ -126,7 +123,7 @@ async def main():
             print("КРИТИЧЕСКАЯ ОШИБКА: SESSION_STRING устарела или неверна!", file=sys.stderr)
             sys.exit(1)
             
-        print("Бот успешно запущен и работает!")
+        print("Бот успешно запущен и работает в режиме полного анти-спама!")
         await client.run_until_disconnected()
         
     except Exception as e:
