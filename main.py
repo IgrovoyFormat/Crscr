@@ -33,7 +33,7 @@ SOURCE_CHANNEL = [
     '@uainvest_scanner/8332'
     '@yovssmashchat'
 ]
-TARGET_CHANNEL = '@c/4434633503/2' 
+TARGET_CHANNEL = '@crscr1' 
 
 # 2. Создаем клиента
 client = TelegramClient(StringSession(SESSION_STRING), API_ID, API_HASH)
