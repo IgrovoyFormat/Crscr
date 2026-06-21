@@ -20,30 +20,40 @@ API_ID = 29138810
 API_HASH = API_HASH.strip()
 SESSION_STRING = SESSION_STRING.strip()
 
-SOURCE_CHANNEL = [
-    '@arbionalerts/7974', 
-    '@arbionalerts/20903', 
-    '@arbionalerts/7978',
-    '@arbionalerts/7976',
-    '@arbionalerts/7970'
-    '@arbionalerts/7964'
-    '@uainvest_scanner/23111'
-    '@uainvest_scanner/12'
-    '@uainvest_scanner/2134'
-    '@uainvest_scanner/8332'
+# 1. Указываем ТОЛЬКО названия самих чатов/каналов (без цифр через слеш)
+SOURCE_CHANNELS = [
+    '@arbionalerts', 
+    '@uainvest_scanner', 
     '@yovssmashchat'
 ]
-TARGET_CHANNEL = '@crscr1' 
 
-# 2. Создаем клиента
-client = TelegramClient(StringSession(SESSION_STRING), API_ID, API_HASH)
+# Если нужно слушать не весь чат, а ТОЛЬКО конкретные топики (номера из ваших ссылок):
+SOURCE_TOPICS = [7974, 20903, 7978, 7976, 7970, 7964, 23111, 12, 2134, 8332]
 
-@client.on(events.NewMessage(chats=SOURCE_CHANNEL))
+# 2. Указываем целевой чат и целевой топик раздельно
+# В ссылках Telegram вида @c/4434633503/2 число 4434633503 — это ID чата. 
+# Telethon требует, чтобы к ID супергрупп и каналов спереди добавлялось -100
+TARGET_CHAT_ID = -1004434633503 
+TARGET_TOPIC_ID = 2  # Цифра после последнего слеша
+
+@client.on(events.NewMessage(chats=SOURCE_CHANNELS))
 async def forward_message(event):
+    # Проверяем, из нужного ли топика пришло сообщение (если это форум)
+    # Если это обычный канал (не форум), это условие можно удалить
+    if event.message.reply_to_msg_id not in SOURCE_TOPICS:
+        # Если сообщение из другого топика — игнорируем его
+        return 
+        
     print(f"Поймали новое сообщение! Текст: {event.raw_text}")
+    
     try:
-        await client.send_message(TARGET_CHANNEL, event.message)
-        print("Сообщение успешно переслано!")
+        # Пересылаем сообщение, явно указывая ID нужного топика через reply_to
+        await client.send_message(
+            entity=TARGET_CHAT_ID, 
+            message=event.message, 
+            reply_to=TARGET_TOPIC_ID
+        )
+        print("Сообщение успешно переслано в целевой топик!")
     except Exception as e:
         print(f"Ошибка при пересылке: {e}")
 
