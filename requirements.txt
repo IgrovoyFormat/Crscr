@@ -6,3 +6,5 @@ telebot
 pyTelegramBotAPI
 qrcode
 asyncio
+re
+sys
