@@ -87,16 +87,9 @@ import sys
 import re  # Для очистки ссылок
 
 # --- 1. Получаем данные из Railway Variables ---
+API_ID_ENV = 29138810
 API_HASH = os.getenv('API_HASH')
 SESSION_STRING = os.getenv('SESSION_STRING')
-
-if not API_ID_ENV or not API_HASH:
-    print("КРИТИЧЕСКАЯ ОШИБКА: API_ID или API_HASH не заданы в переменных Railway!", file=sys.stderr)
-    sys.exit(1)
-
-if not SESSION_STRING:
-    print("КРИТИЧЕСКАЯ ОШИБКА: Переменная SESSION_STRING пустая!", file=sys.stderr)
-    sys.exit(1)
 
 API_ID = 29138810
 API_HASH = API_HASH.strip()
