@@ -84,8 +84,7 @@ async def forward_message(event):
         
         if text:
             # 1. Удаляем мусорные слова из ВСЕХ каналов
-            text = re.sub(r'(?i)(Scanner:|Trader:|Dolbaeb Trade|[😎 ](|Link| [
- [)', '', text)
+            text = re.sub(r'(?i)(Scanner:|Trader:|Dolbaeb Trade|[😎]|Link)', '', text)
             
             # 2. Удаляем любые ссылки на Telegram (t.me/...) из ВСЕХ каналов
             text = re.sub(r'(https?://)?(www\.)?t\.me/[^\s]+', '', text)
