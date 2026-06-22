@@ -69,8 +69,7 @@ async def forward_message(event):
         destination_topic = 184
     elif sender in ['bin_4p', 'bin_9p']:
         destination_topic = 1
-        
-    elif chat_id in ['mexc_5pf', 'mexc_12pf']: 
+    elif sender in ['mexc_5pf', 'mexc_12pf']: 
         destination_topic = 188
 
     if destination_topic is None:
@@ -85,7 +84,8 @@ async def forward_message(event):
         
         if text:
             # 1. Удаляем мусорные слова из ВСЕХ каналов
-            text = re.sub(r'(?i)(Scanner:|Trader:|Dolbaeb Trade)', '', text)
+            text = re.sub(r'(?i)(Scanner:|Trader:|Dolbaeb Trade|[😎 ](|Link| [
+ [)', '', text)
             
             # 2. Удаляем любые ссылки на Telegram (t.me/...) из ВСЕХ каналов
             text = re.sub(r'(https?://)?(www\.)?t\.me/[^\s]+', '', text)
