@@ -75,26 +75,37 @@ async def forward_message(event):
     if destination_topic is None:
         return
 
-    # --- 4. ОБРАБОТКА И ОТПРАВКА ---
+   # --- 4. ОБРАБОТКА И ОТПРАВКА ---
     print(f"Поймали сообщение от {sender or chat_id} (топик {incoming_topic}). Отправляем в топик {destination_topic}...")
     
     try:
-        # Извлекаем голый текст. Это автоматически УНИЧТОЖАЕТ все скрытые гиперссылки!
+        # Извлекаем голый текст. Скрытые гиперссылки отбрасываются автоматически.
         text = event.text or ""
         
         if text:
             # 1. Удаляем мусорные слова из ВСЕХ каналов
-            text = re.sub(r'(?i)(Scanner:|Trader:|Dolbaeb Trade|[😎]|Link)', '', text)
+            text = re.sub(r'(?i)(Scanner:|Trader:|Dolbaeb Trade|😎|Link)', '', text)
             
             # 2. Удаляем любые ссылки на Telegram (t.me/...) из ВСЕХ каналов
             text = re.sub(r'(https?://)?(www\.)?t\.me/[^\s]+', '', text)
             
-            # 3. Если это arbionalerts — удаляем вообще ВСЕ ссылки
+            # 3. Если это arbionalerts — удаляем вообще ВСЕ прямые ссылки
             if needs_strict_cleaning:
                 text = re.sub(r'https?://[^\s]+', '', text)
             
             # 4. Удаляем символы решетки
             text = text.replace('#', '')             
+            
+            # 4.1 Очистка остатков Markdown-разметки ссылок (квадратные и круглые скобки)
+            text = text.replace('[]()', '')
+            text = text.replace('[](', '')
+            text = text.replace(']()', '')
+            text = text.replace('[]', '')
+            text = re.sub(r'^\[\s*$', '', text, flags=re.MULTILINE)
+            text = re.sub(r'^\]\s*$', '', text, flags=re.MULTILINE)
+            
+            # 4.2 НОВЫЙ БЛОК: Удаляем двойные звездочки вокруг текста
+            text = text.replace('**', '')
             
             # 5. Убираем лишние пробелы и пустые абзацы, оставшиеся после очистки
             text = re.sub(r'^[ \t]+$', '', text, flags=re.MULTILINE)
