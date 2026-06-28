@@ -1,16 +1,22 @@
 from telethon import TelegramClient, events
 from telethon.sessions import StringSession
+from telethon.tl.types import MessageEntityTextUrl, MessageEntityUrl
+import telebot
+from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
 import os
 import sys
 import re
+import threading
+import asyncio
 
-# --- 1. Получаем данные из Railway Variables ---
+# --- Переменные окружения ---
 API_ID = 29138810
-API_HASH = os.getenv('API_HASH')
-SESSION_STRING = os.getenv('SESSION_STRING')
-
-API_HASH = API_HASH.strip()
-SESSION_STRING = SESSION_STRING.strip()
+API_HASH = os.getenv('API_HASH', '').strip()
+SESSION_STRING = os.getenv('SESSION_STRING', '').strip()
+BOT_TOKEN = os.getenv('BOT_TOKEN', '').strip()
+URL1 = os.getenv('URL1')
+URL2 = os.getenv('URL2')
+URL3 = os.getenv('URL3')
 
 SOURCE_CHANNELS = [
     '@arbionalerts',
@@ -51,32 +57,30 @@ EXCHANGE_URL_TEMPLATES = {
 }
 
 SENDER_TO_EXCHANGE = {
-    'bin_4p':       'binance',
-    'bin_9p':       'binance',
-    'bin_22p':      'binance',
-    'mexc_5pf':     'mexc',
-    'mexc_12pf':    'mexc',
-    'dt_50p':       'mexc',
-    'bybit_5p':     'bybit',
-    'bb_10p':       'bybit',
-    'gate_5p':      'gate',
-    'g_12p':        'gate',
-    'g_50p':        'gate',
-    'hl_11p':       'hyperliquid',
-    'hl_50p':       'hyperliquid',
-    'okx_12p':      'okx',
-    'okx_50p':      'okx',
-    'aster_50p':    'aster',
-    'bingx_50p':    'bingx',
+    'bin_4p':    'binance',
+    'bin_9p':    'binance',
+    'bin_22p':   'binance',
+    'mexc_5pf':  'mexc',
+    'mexc_12pf': 'mexc',
+    'dt_50p':    'mexc',
+    'bybit_5p':  'bybit',
+    'bb_10p':    'bybit',
+    'gate_5p':   'gate',
+    'g_12p':     'gate',
+    'g_50p':     'gate',
+    'hl_11p':    'hyperliquid',
+    'hl_50p':    'hyperliquid',
+    'okx_12p':   'okx',
+    'okx_50p':   'okx',
+    'aster_50p': 'aster',
+    'bingx_50p': 'bingx',
 }
 
 
 def extract_token(text: str) -> str | None:
-    """Извлекаем тикер токена из начала сообщения (напр. $WHITEWHALE или WHITEWHALE)."""
     match = re.search(r'\$([A-Z0-9]{2,20})', text)
     if match:
         return match.group(1)
-    # Если нет $ — берём первое слово из заглавных букв
     match = re.search(r'\b([A-Z]{2,20})\b', text)
     if match:
         return match.group(1)
@@ -84,17 +88,78 @@ def extract_token(text: str) -> str | None:
 
 
 def build_exchange_link(sender: str, text: str) -> str | None:
-    """Возвращает HTML-ссылку 'Перейти' на торговую пару или None."""
     exchange = SENDER_TO_EXCHANGE.get(sender)
     if not exchange:
         return None
     token = extract_token(text)
     if not token:
         return None
-    url_template = EXCHANGE_URL_TEMPLATES.get(exchange, '')
-    url = url_template.format(token=token)
+    url = EXCHANGE_URL_TEMPLATES[exchange].format(token=token)
     return f'<a href="{url}">Перейти</a>'
 
+
+def strip_last_line_with_entities(text: str, entities: list):
+    """
+    Удаляет последнюю непустую строку из текста и обрезает entities,
+    которые в неё попадают. Возвращает (new_text, new_entities).
+    """
+    lines = text.splitlines()
+    # убираем пустые строки с конца
+    while lines and not lines[-1].strip():
+        lines.pop()
+    if not lines:
+        return '', []
+
+    # вычисляем байтовый срез, который нужно вырезать
+    # (последняя строка + предшествующий \n)
+    last_line = lines[-1]
+    keep_text = '\n'.join(lines[:-1])
+    cut_from = len(keep_text.encode('utf-16-le')) // 2  # TG считает в UTF-16 кодовых единицах
+
+    new_entities = []
+    for ent in (entities or []):
+        ent_end = ent.offset + ent.length
+        if ent_end <= cut_from:
+            # entity полностью в сохраняемой части
+            new_entities.append(ent)
+        elif ent.offset < cut_from:
+            # entity частично пересекает границу — обрезаем
+            import copy
+            e = copy.copy(ent)
+            e.length = cut_from - ent.offset
+            new_entities.append(e)
+        # entity полностью в удалённой части — выбрасываем
+
+    return keep_text.strip(), new_entities
+
+
+# ===================== telebot /start =====================
+bot = telebot.TeleBot(BOT_TOKEN) if BOT_TOKEN else None
+
+
+@bot.message_handler(commands=['start'])  # type: ignore[misc]
+def start_command(message):
+    markup = InlineKeyboardMarkup()
+    if URL1:
+        markup.add(InlineKeyboardButton(text="Tribute", url=URL1))
+    if URL2:
+        markup.add(InlineKeyboardButton(text="Crypto bot", url=URL2))
+    if URL3:
+        markup.add(InlineKeyboardButton(text="Support", url=URL3))
+    bot.send_message(
+        message.chat.id,
+        "Hi! 👋 I'm your personal payment assistant.",
+        reply_markup=markup
+    )
+
+
+def run_telebot():
+    if bot:
+        print("telebot запущен...")
+        bot.polling(none_stop=True, timeout=30)
+
+
+# ===================== Telethon userbot =====================
 client = TelegramClient(
     StringSession(SESSION_STRING),
     API_ID,
@@ -105,7 +170,6 @@ client = TelegramClient(
 @client.on(events.NewMessage(chats=SOURCE_CHANNELS))
 async def forward_message(event):
     sender = getattr(event.chat, 'username', '')
-
     if sender:
         sender = sender.lower()
 
@@ -115,53 +179,33 @@ async def forward_message(event):
     destination_topic = None
     needs_strict_cleaning = False
 
-    # --- ЛОГИКА МАРШРУТИЗАЦИИ ---
-
+    # --- МАРШРУТИЗАЦИЯ ---
     if sender == 'uainvest_scanner' and incoming_topic == 8332:
         destination_topic = 180
-
     elif sender == 'uainvest_scanner' and incoming_topic == 23111:
         destination_topic = 164
-
     elif sender == 'uainvest_scanner' and incoming_topic == 12:
         destination_topic = 155
-
     elif sender == 'arbionalerts' and incoming_topic == 7976:
         destination_topic = 158
         needs_strict_cleaning = True
-
     elif sender == 'arbionalerts' and incoming_topic == 7966:
         destination_topic = 155
         needs_strict_cleaning = True
-
-    elif sender in [
-        'dt_50p',
-        'hl_50p',
-        'g_50p',
-        'aster_50p',
-        'bingx_50p',
-        'okx_50p'
-    ]:
+    elif sender in ['dt_50p', 'hl_50p', 'g_50p', 'aster_50p', 'bingx_50p', 'okx_50p']:
         destination_topic = 211
-
     elif sender == 'hl_11p':
         destination_topic = 1
-
     elif sender == 'okx_12p':
         destination_topic = 1
-
     elif sender in ['gate_5p', 'g_12p']:
         destination_topic = 190
-
     elif sender == 'tracervarikteat':
         destination_topic = 186
-
     elif sender in ['bybit_5p', 'bb_10p']:
         destination_topic = 184
-
     elif sender in ['bin_4p', 'bin_9p']:
         destination_topic = 1
-
     elif sender in ['mexc_5pf', 'mexc_12pf']:
         destination_topic = 188
 
@@ -175,76 +219,43 @@ async def forward_message(event):
     )
 
     try:
-        # Берём только текст без скрытых ссылок
+        # ---- NFT канал: сохраняем entities, удаляем только последнюю строку ----
+        if sender == 'tracervarikteat':
+            raw = event.message.message or ""
+            entities = list(event.message.entities or [])
+            new_text, new_entities = strip_last_line_with_entities(raw, entities)
+
+            await client.send_message(
+                entity=TARGET_CHAT_ID,
+                message=new_text,
+                formatting_entities=new_entities,
+                reply_to=destination_topic,
+                file=event.media,
+            )
+            print("NFT — успешно отправлено!")
+            return
+
+        # ---- Все остальные каналы: текстовая очистка ----
         text = event.raw_text or ""
 
         if text:
-
-            # Удаляем строки целиком
             text = re.sub(r'(?im)^.*Dolbaeb Trade.*$\n?', '', text)
             text = re.sub(r'(?im)^.*Scanner:.*$\n?', '', text)
             text = re.sub(r'(?im)^.*Trader:.*$\n?', '', text)
 
-            # Удаляем ссылки Telegram (кроме NFT канала)
-            if sender != 'tracervarikteat':
-                text = re.sub(
-                    r'(https?://)?(www\.)?t\.me/[^\s]+',
-                    '',
-                    text
-                )
+            text = re.sub(r'(https?://)?(www\.)?t\.me/[^\s]+', '', text)
 
-            # Для arbionalerts удаляем вообще все ссылки
             if needs_strict_cleaning:
                 text = re.sub(r'https?://[^\s]+', '', text)
 
-            # Удаляем #
             text = text.replace('#', '')
 
-            # Удаляем одиночные скобки
-            text = re.sub(
-                r'^[\[\]\(\)]+$',
-                '',
-                text,
-                flags=re.MULTILINE
-            )
-
-            # Удаляем строки из псевдографики
-            text = re.sub(
-                r'^[├└┌│─]+.*$',
-                '',
-                text,
-                flags=re.MULTILINE
-            )
-
-            # Удаляем одиночные символы типа [, ], └, ├
-            text = re.sub(
-                r'^[\[\]└┌├│─]+$',
-                '',
-                text,
-                flags=re.MULTILINE
-            )
-
-            # Удаляем пустые строки
-            text = re.sub(
-                r'^[ \t]*$\n?',
-                '',
-                text,
-                flags=re.MULTILINE
-            )
-
-            # Не более одной пустой строки подряд
+            text = re.sub(r'^[\[\]\(\)]+$', '', text, flags=re.MULTILINE)
+            text = re.sub(r'^[├└┌│─]+.*$', '', text, flags=re.MULTILINE)
+            text = re.sub(r'^[\[\]└┌├│─]+$', '', text, flags=re.MULTILINE)
+            text = re.sub(r'^[ \t]*$\n?', '', text, flags=re.MULTILINE)
             text = re.sub(r'\n{3,}', '\n\n', text)
-
             text = text.strip()
-
-            # Для tracervarikteat (NFT) удаляем последнюю строку
-            if sender == 'tracervarikteat':
-                lines = text.splitlines()
-                while lines and not lines[-1].strip():
-                    lines.pop()
-                if lines:
-                    lines.pop()
-                text = '\n'.join(lines).strip()
 
         # Добавляем ссылку "Перейти" на биржу
         exchange_link = build_exchange_link(sender, text)
@@ -258,38 +269,31 @@ async def forward_message(event):
             file=event.media,
             parse_mode='html'
         )
-
         print("Успешно очищено и отправлено!")
 
     except Exception as e:
         print(f"Ошибка при отправке сообщения: {e}")
 
 
-# --- Запуск ---
+# ===================== Запуск =====================
 async def main():
-    print("Инициализация клиента Telethon...")
-
+    print("Инициализация Telethon...")
     try:
         await client.connect()
-
         if not await client.is_user_authorized():
-            print(
-                "КРИТИЧЕСКАЯ ОШИБКА: SESSION_STRING устарела или неверна!",
-                file=sys.stderr
-            )
+            print("КРИТИЧЕСКАЯ ОШИБКА: SESSION_STRING устарела!", file=sys.stderr)
             sys.exit(1)
-
-        print("Бот успешно запущен и работает!")
-
+        print("Telethon userbot запущен!")
         await client.run_until_disconnected()
-
     except Exception as e:
-        print(
-            f"Непредвиденная ошибка при работе бота: {e}",
-            file=sys.stderr
-        )
+        print(f"Непредвиденная ошибка: {e}", file=sys.stderr)
         sys.exit(1)
 
 
 if __name__ == '__main__':
+    # Запускаем telebot в отдельном потоке
+    t = threading.Thread(target=run_telebot, daemon=True)
+    t.start()
+
+    # Запускаем Telethon в основном потоке
     client.loop.run_until_complete(main())
