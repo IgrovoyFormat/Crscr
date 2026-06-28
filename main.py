@@ -1,6 +1,5 @@
 from telethon import TelegramClient, events
 from telethon.sessions import StringSession
-from telethon.tl.types import KeyboardButtonUrl, KeyboardButtonRow, ReplyInlineMarkup
 import os
 import sys
 import re
@@ -84,8 +83,8 @@ def extract_token(text: str) -> str | None:
     return None
 
 
-def build_exchange_button(sender: str, text: str):
-    """Возвращает ReplyInlineMarkup с кнопкой-ссылкой или None."""
+def build_exchange_link(sender: str, text: str) -> str | None:
+    """Возвращает HTML-ссылку 'Перейти' на торговую пару или None."""
     exchange = SENDER_TO_EXCHANGE.get(sender)
     if not exchange:
         return None
@@ -94,19 +93,7 @@ def build_exchange_button(sender: str, text: str):
         return None
     url_template = EXCHANGE_URL_TEMPLATES.get(exchange, '')
     url = url_template.format(token=token)
-    exchange_labels = {
-        'binance':     '🟡 Binance',
-        'mexc':        '🔵 MEXC',
-        'bybit':       '🟠 Bybit',
-        'gate':        '🟢 Gate.io',
-        'hyperliquid': '🔷 HyperLiquid',
-        'okx':         '⚫ OKX',
-        'aster':       '🌟 Aster',
-        'bingx':       '🔴 BingX',
-    }
-    label = f"{exchange_labels.get(exchange, exchange.upper())} | ${token}/USDT"
-    button = KeyboardButtonUrl(text=label, url=url)
-    return ReplyInlineMarkup(rows=[KeyboardButtonRow(buttons=[button])])
+    return f'<a href="{url}">Перейти</a>'
 
 client = TelegramClient(
     StringSession(SESSION_STRING),
@@ -198,12 +185,13 @@ async def forward_message(event):
             text = re.sub(r'(?im)^.*Scanner:.*$\n?', '', text)
             text = re.sub(r'(?im)^.*Trader:.*$\n?', '', text)
 
-            # Удаляем ссылки Telegram
-            text = re.sub(
-                r'(https?://)?(www\.)?t\.me/[^\s]+',
-                '',
-                text
-            )
+            # Удаляем ссылки Telegram (кроме NFT канала)
+            if sender != 'tracervarikteat':
+                text = re.sub(
+                    r'(https?://)?(www\.)?t\.me/[^\s]+',
+                    '',
+                    text
+                )
 
             # Для arbionalerts удаляем вообще все ссылки
             if needs_strict_cleaning:
@@ -258,15 +246,17 @@ async def forward_message(event):
                     lines.pop()
                 text = '\n'.join(lines).strip()
 
-        # Строим кнопку биржи (если применимо)
-        buttons = build_exchange_button(sender, text)
+        # Добавляем ссылку "Перейти" на биржу
+        exchange_link = build_exchange_link(sender, text)
+        if exchange_link:
+            text = text + '\n\n' + exchange_link
 
         await client.send_message(
             entity=TARGET_CHAT_ID,
             message=text,
             reply_to=destination_topic,
             file=event.media,
-            buttons=buttons
+            parse_mode='html'
         )
 
         print("Успешно очищено и отправлено!")
