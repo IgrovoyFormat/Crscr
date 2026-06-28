@@ -45,6 +45,14 @@ client = TelegramClient(
 )
 
 
+ROUTES = {
+('uainvest_scanner',8332):(180,False),('uainvest_scanner',23111):(164,False),('uainvest_scanner',12):(155,False),
+('arbionalerts',7976):(158,True),('arbionalerts',7966):(155,True)}
+TOPIC_BY_SENDER={'dt_50p':211,'hl_50p':211,'g_50p':211,'aster_50p':211,'bingx_50p':211,'okx_50p':211,'hl_11p':1,'okx_12p':1,'gate_5p':190,'g_12p':190,'tracervarikteat':186,'bybit_5p':184,'bb_10p':184,'bin_4p':1,'bin_9p':1,'mexc_5pf':188,'mexc_12pf':188}
+EXCHANGE_BY_SENDER={'bin_4p':'binance','bin_9p':'binance','mexc_5pf':'mexc','mexc_12pf':'mexc','dt_50p':'mexc','bybit_5p':'bybit','bb_10p':'bybit','gate_5p':'gate','g_12p':'gate','g_50p':'gate','hl_11p':'hyperliquid','hl_50p':'hyperliquid','okx_12p':'okx','okx_50p':'okx','aster_50p':'aster','bingx_50p':'bingx'}
+EXCHANGE_URLS={'binance':'https://www.binance.com/en/futures/{token}USDT','mexc':'https://futures.mexc.com/exchange/{token}_USDT','bybit':'https://www.bybit.com/trade/usdt/{token}USDT','gate':'https://www.gate.io/futures_trade/USDT/{token}_USDT','hyperliquid':'https://app.hyperliquid.xyz/trade/{token}','okx':'https://www.okx.com/trade-swap/{token}-usdt-swap','aster':'https://www.asterdex.com/en/trade/{token}_USDT','bingx':'https://bingx.com/en/futures/forward/{token}USDT'}
+
+
 @client.on(events.NewMessage(chats=SOURCE_CHANNELS))
 async def forward_message(event):
     sender = getattr(event.chat, 'username', '')
