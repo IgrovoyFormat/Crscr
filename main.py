@@ -95,7 +95,76 @@ def build_exchange_link(sender: str, text: str) -> str | None:
     if not token:
         return None
     url = EXCHANGE_URL_TEMPLATES[exchange].format(token=token)
-    return f'<a href="{url}">Перейти</a>'
+    return f'<a href="{url}">Follow</a>'
+
+
+# --- Замены слов ---
+WORD_REPLACEMENTS = [
+    ('Изм.',      'Price change'),
+    ('Справедл.', 'Fair'),
+    (
+        'Данный токен не доступен в СНГ на MEXC',
+        'This token is not available on MEXC in the CIS(SNG) region.'
+    ),
+]
+
+
+def apply_word_replacements(text: str) -> str:
+    for old, new in WORD_REPLACEMENTS:
+        text = text.replace(old, new)
+    return text
+
+
+def remove_word_with_entities(text: str, entities: list, word: str):
+    """
+    Удаляет все вхождения слова из текста и сдвигает offsets entities.
+    Возвращает (new_text, new_entities).
+    """
+    import copy
+    word_bytes_len = len(word.encode('utf-16-le')) // 2  # в UTF-16 единицах
+
+    result_text = text
+    result_entities = [copy.copy(e) for e in (entities or [])]
+
+    # Ищем все вхождения и удаляем справа налево (чтобы не сбивать индексы)
+    matches = list(re.finditer(re.escape(word), result_text))
+    for m in reversed(matches):
+        start_char = m.start()
+        end_char = m.end()
+        # UTF-16 offset до начала совпадения
+        utf16_start = len(result_text[:start_char].encode('utf-16-le')) // 2
+        utf16_end   = len(result_text[:end_char].encode('utf-16-le')) // 2
+        removed_len = utf16_end - utf16_start
+
+        # Удаляем из строки
+        result_text = result_text[:start_char] + result_text[end_char:]
+
+        # Корректируем entities
+        updated = []
+        for e in result_entities:
+            e_end = e.offset + e.length
+            if e.offset >= utf16_end:
+                # entity полностью после — сдвигаем
+                e.offset -= removed_len
+                updated.append(e)
+            elif e_end <= utf16_start:
+                # entity полностью до — не трогаем
+                updated.append(e)
+            elif e.offset >= utf16_start and e_end <= utf16_end:
+                # entity полностью внутри удаляемого слова — выбрасываем
+                pass
+            else:
+                # частичное пересечение — обрезаем length
+                if e.offset < utf16_start:
+                    e.length = min(e.length, utf16_start - e.offset)
+                else:
+                    e.offset = utf16_start
+                    e.length = max(0, e_end - utf16_end)
+                if e.length > 0:
+                    updated.append(e)
+        result_entities = updated
+
+    return result_text, result_entities
 
 
 def strip_last_line_with_entities(text: str, entities: list):
@@ -235,6 +304,28 @@ async def forward_message(event):
             print("NFT — успешно отправлено!")
             return
 
+        # ---- uainvest_scanner: сохраняем entities, удаляем "Link" ----
+        if sender == 'uainvest_scanner':
+            raw = event.message.message or ""
+            entities = list(event.message.entities or [])
+
+            # Удаляем слово "Link" (вместе с пробелом перед ним если есть)
+            raw, entities = remove_word_with_entities(raw, entities, ' Link')
+            raw, entities = remove_word_with_entities(raw, entities, 'Link')
+
+            # Текстовые замены (не затрагивают entities — слова разные)
+            raw = apply_word_replacements(raw)
+
+            await client.send_message(
+                entity=TARGET_CHAT_ID,
+                message=raw,
+                formatting_entities=entities,
+                reply_to=destination_topic,
+                file=event.media,
+            )
+            print("uainvest_scanner — успешно отправлено!")
+            return
+
         # ---- Все остальные каналы: текстовая очистка ----
         text = event.raw_text or ""
 
@@ -256,6 +347,7 @@ async def forward_message(event):
             text = re.sub(r'^[ \t]*$\n?', '', text, flags=re.MULTILINE)
             text = re.sub(r'\n{3,}', '\n\n', text)
             text = text.strip()
+            text = apply_word_replacements(text)
 
         # Добавляем ссылку "Перейти" на биржу
         exchange_link = build_exchange_link(sender, text)
