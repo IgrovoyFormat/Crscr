@@ -1,5 +1,6 @@
 from telethon import TelegramClient, events
 from telethon.sessions import StringSession
+from telethon.tl.types import KeyboardButtonUrl, KeyboardButtonRow, ReplyInlineMarkup
 import os
 import sys
 import re
@@ -38,19 +39,80 @@ SOURCE_CHANNELS = [
 
 TARGET_CHAT_ID = -1004434633503
 
+# --- URL-шаблоны для бирж ---
+EXCHANGE_URL_TEMPLATES = {
+    'binance':      'https://www.binance.com/en/trade/{token}_USDT',
+    'mexc':         'https://www.mexc.com/exchange/{token}_USDT',
+    'bybit':        'https://www.bybit.com/trade/usdt/{token}USDT',
+    'gate':         'https://www.gate.io/trade/{token}_USDT',
+    'hyperliquid':  'https://app.hyperliquid.xyz/trade/{token}',
+    'okx':          'https://www.okx.com/trade-spot/{token}-usdt',
+    'aster':        'https://www.aster.com/trade/{token}_USDT',
+    'bingx':        'https://bingx.com/en/spot/{token}USDT/',
+}
+
+SENDER_TO_EXCHANGE = {
+    'bin_4p':       'binance',
+    'bin_9p':       'binance',
+    'bin_22p':      'binance',
+    'mexc_5pf':     'mexc',
+    'mexc_12pf':    'mexc',
+    'dt_50p':       'mexc',
+    'bybit_5p':     'bybit',
+    'bb_10p':       'bybit',
+    'gate_5p':      'gate',
+    'g_12p':        'gate',
+    'g_50p':        'gate',
+    'hl_11p':       'hyperliquid',
+    'hl_50p':       'hyperliquid',
+    'okx_12p':      'okx',
+    'okx_50p':      'okx',
+    'aster_50p':    'aster',
+    'bingx_50p':    'bingx',
+}
+
+
+def extract_token(text: str) -> str | None:
+    """Извлекаем тикер токена из начала сообщения (напр. $WHITEWHALE или WHITEWHALE)."""
+    match = re.search(r'\$([A-Z0-9]{2,20})', text)
+    if match:
+        return match.group(1)
+    # Если нет $ — берём первое слово из заглавных букв
+    match = re.search(r'\b([A-Z]{2,20})\b', text)
+    if match:
+        return match.group(1)
+    return None
+
+
+def build_exchange_button(sender: str, text: str):
+    """Возвращает ReplyInlineMarkup с кнопкой-ссылкой или None."""
+    exchange = SENDER_TO_EXCHANGE.get(sender)
+    if not exchange:
+        return None
+    token = extract_token(text)
+    if not token:
+        return None
+    url_template = EXCHANGE_URL_TEMPLATES.get(exchange, '')
+    url = url_template.format(token=token)
+    exchange_labels = {
+        'binance':     '🟡 Binance',
+        'mexc':        '🔵 MEXC',
+        'bybit':       '🟠 Bybit',
+        'gate':        '🟢 Gate.io',
+        'hyperliquid': '🔷 HyperLiquid',
+        'okx':         '⚫ OKX',
+        'aster':       '🌟 Aster',
+        'bingx':       '🔴 BingX',
+    }
+    label = f"{exchange_labels.get(exchange, exchange.upper())} | ${token}/USDT"
+    button = KeyboardButtonUrl(text=label, url=url)
+    return ReplyInlineMarkup(rows=[KeyboardButtonRow(buttons=[button])])
+
 client = TelegramClient(
     StringSession(SESSION_STRING),
     API_ID,
     API_HASH
 )
-
-
-ROUTES = {
-('uainvest_scanner',8332):(180,False),('uainvest_scanner',23111):(164,False),('uainvest_scanner',12):(155,False),
-('arbionalerts',7976):(158,True),('arbionalerts',7966):(155,True)}
-TOPIC_BY_SENDER={'dt_50p':211,'hl_50p':211,'g_50p':211,'aster_50p':211,'bingx_50p':211,'okx_50p':211,'hl_11p':1,'okx_12p':1,'gate_5p':190,'g_12p':190,'tracervarikteat':186,'bybit_5p':184,'bb_10p':184,'bin_4p':1,'bin_9p':1,'mexc_5pf':188,'mexc_12pf':188}
-EXCHANGE_BY_SENDER={'bin_4p':'binance','bin_9p':'binance','mexc_5pf':'mexc','mexc_12pf':'mexc','dt_50p':'mexc','bybit_5p':'bybit','bb_10p':'bybit','gate_5p':'gate','g_12p':'gate','g_50p':'gate','hl_11p':'hyperliquid','hl_50p':'hyperliquid','okx_12p':'okx','okx_50p':'okx','aster_50p':'aster','bingx_50p':'bingx'}
-EXCHANGE_URLS={'binance':'https://www.binance.com/en/futures/{token}USDT','mexc':'https://futures.mexc.com/exchange/{token}_USDT','bybit':'https://www.bybit.com/trade/usdt/{token}USDT','gate':'https://www.gate.io/futures_trade/USDT/{token}_USDT','hyperliquid':'https://app.hyperliquid.xyz/trade/{token}','okx':'https://www.okx.com/trade-swap/{token}-usdt-swap','aster':'https://www.asterdex.com/en/trade/{token}_USDT','bingx':'https://bingx.com/en/futures/forward/{token}USDT'}
 
 
 @client.on(events.NewMessage(chats=SOURCE_CHANNELS))
@@ -96,10 +158,10 @@ async def forward_message(event):
         destination_topic = 211
 
     elif sender == 'hl_11p':
-        destination_topic = 2
+        destination_topic = 1
 
     elif sender == 'okx_12p':
-        destination_topic = 196
+        destination_topic = 1
 
     elif sender in ['gate_5p', 'g_12p']:
         destination_topic = 190
@@ -187,11 +249,24 @@ async def forward_message(event):
 
             text = text.strip()
 
+            # Для tracervarikteat (NFT) удаляем последнюю строку
+            if sender == 'tracervarikteat':
+                lines = text.splitlines()
+                while lines and not lines[-1].strip():
+                    lines.pop()
+                if lines:
+                    lines.pop()
+                text = '\n'.join(lines).strip()
+
+        # Строим кнопку биржи (если применимо)
+        buttons = build_exchange_button(sender, text)
+
         await client.send_message(
             entity=TARGET_CHAT_ID,
             message=text,
             reply_to=destination_topic,
-            file=event.media
+            file=event.media,
+            buttons=buttons
         )
 
         print("Успешно очищено и отправлено!")
