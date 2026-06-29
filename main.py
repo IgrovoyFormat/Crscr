@@ -6,8 +6,8 @@ from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
 import os
 import sys
 import re
+import copy
 import threading
-import asyncio
 
 # --- Переменные окружения ---
 API_ID = 29138810
@@ -54,6 +54,33 @@ EXCHANGE_URL_TEMPLATES = {
     'okx':          'https://www.okx.com/trade-spot/{token}-usdt',
     'aster':        'https://www.aster.com/trade/{token}_USDT',
     'bingx':        'https://bingx.com/en/spot/{token}USDT/',
+    'htx':          'https://www.htx.com/trade/{token}_usdt',
+    'kucoin':       'https://www.kucoin.com/trade/{token}-USDT',
+    'bitget':       'https://www.bitget.com/spot/{token}USDT',
+    'xt':           'https://www.xt.com/en/trade/{token}_usdt',
+    'coinex':       'https://www.coinex.com/trading?currency=usdt&dest={token}',
+    'bitmart':      'https://www.bitmart.com/trade/en-US?symbol={token}_USDT',
+    'balpha':       'https://app.bluefin.io/trade/{token}-PERP',
+}
+
+# Алиасы названий бирж из текста → ключ в EXCHANGE_URL_TEMPLATES
+EXCHANGE_ALIASES = {
+    'binance':      'binance',
+    'mexc':         'mexc',
+    'bybit':        'bybit',
+    'gate':         'gate',
+    'hyperliquid':  'hyperliquid',
+    'hl':           'hyperliquid',
+    'okx':          'okx',
+    'aster':        'aster',
+    'bingx':        'bingx',
+    'htx':          'htx',
+    'kucoin':       'kucoin',
+    'bitget':       'bitget',
+    'xt':           'xt',
+    'coinex':       'coinex',
+    'bitmart':      'bitmart',
+    'balpha':       'balpha',
 }
 
 SENDER_TO_EXCHANGE = {
@@ -76,28 +103,6 @@ SENDER_TO_EXCHANGE = {
     'bingx_50p': 'bingx',
 }
 
-
-def extract_token(text: str) -> str | None:
-    match = re.search(r'\$([A-Z0-9]{2,20})', text)
-    if match:
-        return match.group(1)
-    match = re.search(r'\b([A-Z]{2,20})\b', text)
-    if match:
-        return match.group(1)
-    return None
-
-
-def build_exchange_link(sender: str, text: str) -> str | None:
-    exchange = SENDER_TO_EXCHANGE.get(sender)
-    if not exchange:
-        return None
-    token = extract_token(text)
-    if not token:
-        return None
-    url = EXCHANGE_URL_TEMPLATES[exchange].format(token=token)
-    return f'<a href="{url}">Follow</a>'
-
-
 # --- Замены слов ---
 WORD_REPLACEMENTS = [
     ('Изм.',      'Price change'),
@@ -115,46 +120,84 @@ def apply_word_replacements(text: str) -> str:
     return text
 
 
-def remove_word_with_entities(text: str, entities: list, word: str):
-    """
-    Удаляет все вхождения слова из текста и сдвигает offsets entities.
-    Возвращает (new_text, new_entities).
-    """
-    import copy
-    word_bytes_len = len(word.encode('utf-16-le')) // 2  # в UTF-16 единицах
+def extract_token_from_first_line(text: str) -> str | None:
+    """Берёт первую строку и ищет токен — первое слово заглавными буквами."""
+    first_line = text.strip().splitlines()[0] if text.strip() else ''
+    # Ищем ТОКЕН в начале: "TER bitget / kucoin" → TER
+    m = re.match(r'^([A-Z][A-Z0-9]{1,19})\b', first_line)
+    if m:
+        return m.group(1)
+    # Или $TOKEN
+    m = re.search(r'\$([A-Z0-9]{2,20})', first_line)
+    if m:
+        return m.group(1)
+    return None
 
+
+def extract_exchanges_from_text(text: str) -> list[str]:
+    """Находит все упомянутые биржи в тексте (в нижнем регистре)."""
+    found = []
+    seen = set()
+    for alias in EXCHANGE_ALIASES:
+        # ищем как отдельное слово (без учёта регистра)
+        if re.search(r'\b' + re.escape(alias) + r'\b', text, re.IGNORECASE):
+            key = EXCHANGE_ALIASES[alias]
+            if key not in seen:
+                seen.add(key)
+                found.append(key)
+    return found
+
+
+def build_exchange_links_for_text(token: str, exchanges: list[str]) -> str:
+    """Строит строку HTML-ссылок на все найденные биржи."""
+    links = []
+    for ex in exchanges:
+        template = EXCHANGE_URL_TEMPLATES.get(ex)
+        if template:
+            url = template.format(token=token)
+            label = ex.upper() if ex not in ('gate', 'hyperliquid') else ('Gate' if ex == 'gate' else 'HyperLiquid')
+            links.append(f'<a href="{url}">{label}</a>')
+    return '  |  '.join(links)
+
+
+def build_single_exchange_link(sender: str, text: str) -> str | None:
+    """Для простых каналов (bin_4p и т.д.) — одна ссылка Follow."""
+    exchange = SENDER_TO_EXCHANGE.get(sender)
+    if not exchange:
+        return None
+    token = extract_token_from_first_line(text)
+    if not token:
+        return None
+    url = EXCHANGE_URL_TEMPLATES[exchange].format(token=token)
+    return f'<a href="{url}">Follow</a>'
+
+
+def remove_word_with_entities(text: str, entities: list, word: str):
+    """Удаляет слово из текста и корректирует UTF-16 offsets entities."""
     result_text = text
     result_entities = [copy.copy(e) for e in (entities or [])]
 
-    # Ищем все вхождения и удаляем справа налево (чтобы не сбивать индексы)
     matches = list(re.finditer(re.escape(word), result_text))
     for m in reversed(matches):
         start_char = m.start()
         end_char = m.end()
-        # UTF-16 offset до начала совпадения
         utf16_start = len(result_text[:start_char].encode('utf-16-le')) // 2
         utf16_end   = len(result_text[:end_char].encode('utf-16-le')) // 2
         removed_len = utf16_end - utf16_start
 
-        # Удаляем из строки
         result_text = result_text[:start_char] + result_text[end_char:]
 
-        # Корректируем entities
         updated = []
         for e in result_entities:
             e_end = e.offset + e.length
             if e.offset >= utf16_end:
-                # entity полностью после — сдвигаем
                 e.offset -= removed_len
                 updated.append(e)
             elif e_end <= utf16_start:
-                # entity полностью до — не трогаем
                 updated.append(e)
             elif e.offset >= utf16_start and e_end <= utf16_end:
-                # entity полностью внутри удаляемого слова — выбрасываем
-                pass
+                pass  # выбрасываем
             else:
-                # частичное пересечение — обрезаем length
                 if e.offset < utf16_start:
                     e.length = min(e.length, utf16_start - e.offset)
                 else:
@@ -168,36 +211,25 @@ def remove_word_with_entities(text: str, entities: list, word: str):
 
 
 def strip_last_line_with_entities(text: str, entities: list):
-    """
-    Удаляет последнюю непустую строку из текста и обрезает entities,
-    которые в неё попадают. Возвращает (new_text, new_entities).
-    """
+    """Удаляет последнюю непустую строку, корректирует entities."""
     lines = text.splitlines()
-    # убираем пустые строки с конца
     while lines and not lines[-1].strip():
         lines.pop()
     if not lines:
         return '', []
 
-    # вычисляем байтовый срез, который нужно вырезать
-    # (последняя строка + предшествующий \n)
-    last_line = lines[-1]
     keep_text = '\n'.join(lines[:-1])
-    cut_from = len(keep_text.encode('utf-16-le')) // 2  # TG считает в UTF-16 кодовых единицах
+    cut_from = len(keep_text.encode('utf-16-le')) // 2
 
     new_entities = []
     for ent in (entities or []):
         ent_end = ent.offset + ent.length
         if ent_end <= cut_from:
-            # entity полностью в сохраняемой части
             new_entities.append(ent)
         elif ent.offset < cut_from:
-            # entity частично пересекает границу — обрезаем
-            import copy
             e = copy.copy(ent)
             e.length = cut_from - ent.offset
             new_entities.append(e)
-        # entity полностью в удалённой части — выбрасываем
 
     return keep_text.strip(), new_entities
 
@@ -205,27 +237,35 @@ def strip_last_line_with_entities(text: str, entities: list):
 # ===================== telebot /start =====================
 bot = telebot.TeleBot(BOT_TOKEN) if BOT_TOKEN else None
 
-
-@bot.message_handler(commands=['start'])  # type: ignore[misc]
-def start_command(message):
-    markup = InlineKeyboardMarkup()
-    if URL1:
-        markup.add(InlineKeyboardButton(text="Tribute", url=URL1))
-    if URL2:
-        markup.add(InlineKeyboardButton(text="Crypto bot", url=URL2))
-    if URL3:
-        markup.add(InlineKeyboardButton(text="Support", url=URL3))
-    bot.send_message(
-        message.chat.id,
-        "Hi! 👋 I'm your personal payment assistant.",
-        reply_markup=markup
-    )
+if bot:
+    @bot.message_handler(commands=['start'])
+    def start_command(message):
+        markup = InlineKeyboardMarkup()
+        if URL1:
+            markup.add(InlineKeyboardButton(text="Tribute", url=URL1))
+        if URL2:
+            markup.add(InlineKeyboardButton(text="Crypto bot", url=URL2))
+        if URL3:
+            markup.add(InlineKeyboardButton(text="Support", url=URL3))
+        bot.send_message(
+            message.chat.id,
+            "Hi! 👋 I'm your personal payment assistant.",
+            reply_markup=markup
+        )
 
 
 def run_telebot():
-    if bot:
-        print("telebot запущен...")
-        bot.polling(none_stop=True, timeout=30)
+    if not bot:
+        print("BOT_TOKEN не задан, telebot не запущен.")
+        return
+    print("telebot запущен...")
+    while True:
+        try:
+            bot.polling(none_stop=True, timeout=30, long_polling_timeout=30)
+        except Exception as e:
+            print(f"telebot упал, перезапуск через 5с: {e}")
+            import time
+            time.sleep(5)
 
 
 # ===================== Telethon userbot =====================
@@ -257,7 +297,6 @@ async def forward_message(event):
         destination_topic = 155
     elif sender == 'arbionalerts' and incoming_topic == 7976:
         destination_topic = 158
-        needs_strict_cleaning = True
     elif sender == 'arbionalerts' and incoming_topic == 7966:
         destination_topic = 155
         needs_strict_cleaning = True
@@ -282,18 +321,16 @@ async def forward_message(event):
         return
 
     print(
-        f"Поймали сообщение от {sender or chat_id} "
-        f"(топик {incoming_topic}). "
-        f"Отправляем в топик {destination_topic}..."
+        f"Поймали от {sender or chat_id} "
+        f"(топик {incoming_topic}) → топик {destination_topic}"
     )
 
     try:
-        # ---- NFT канал: сохраняем entities, удаляем только последнюю строку ----
+        # ---- NFT канал ----
         if sender == 'tracervarikteat':
             raw = event.message.message or ""
             entities = list(event.message.entities or [])
             new_text, new_entities = strip_last_line_with_entities(raw, entities)
-
             await client.send_message(
                 entity=TARGET_CHAT_ID,
                 message=new_text,
@@ -301,32 +338,86 @@ async def forward_message(event):
                 reply_to=destination_topic,
                 file=event.media,
             )
-            print("NFT — успешно отправлено!")
+            print("NFT — отправлено!")
             return
 
-        # ---- uainvest_scanner: сохраняем entities, удаляем "Link" ----
+        # ---- uainvest_scanner: entities + удаляем "Link" + биржевые ссылки ----
         if sender == 'uainvest_scanner':
             raw = event.message.message or ""
             entities = list(event.message.entities or [])
 
-            # Удаляем слово "Link" (вместе с пробелом перед ним если есть)
             raw, entities = remove_word_with_entities(raw, entities, ' Link')
             raw, entities = remove_word_with_entities(raw, entities, 'Link')
-
-            # Текстовые замены (не затрагивают entities — слова разные)
             raw = apply_word_replacements(raw)
 
-            await client.send_message(
-                entity=TARGET_CHAT_ID,
-                message=raw,
-                formatting_entities=entities,
-                reply_to=destination_topic,
-                file=event.media,
-            )
-            print("uainvest_scanner — успешно отправлено!")
+            # Строим ссылки на биржи из текста
+            token = extract_token_from_first_line(raw)
+            exchanges = extract_exchanges_from_text(raw)
+            if token and exchanges:
+                links_str = build_exchange_links_for_text(token, exchanges)
+                # Добавляем как plain HTML в конец (entities уже отправлены отдельно)
+                # Отправляем через parse_mode html, entities игнорируем (несовместимо)
+                raw = apply_word_replacements(raw)
+                await client.send_message(
+                    entity=TARGET_CHAT_ID,
+                    message=raw + '\n\n' + links_str,
+                    reply_to=destination_topic,
+                    file=event.media,
+                    parse_mode='html',
+                )
+            else:
+                await client.send_message(
+                    entity=TARGET_CHAT_ID,
+                    message=raw,
+                    formatting_entities=entities,
+                    reply_to=destination_topic,
+                    file=event.media,
+                )
+            print("uainvest_scanner — отправлено!")
             return
 
-        # ---- Все остальные каналы: текстовая очистка ----
+        # ---- arbionalerts топик 7976 (Funding) — убираем только uainvest ссылку ----
+        if sender == 'arbionalerts' and destination_topic == 158:
+            raw = event.message.message or ""
+            entities = list(event.message.entities or [])
+
+            # Удаляем только ссылки на uainvest.com.ua из entities
+            clean_entities = []
+            for ent in entities:
+                url = getattr(ent, 'url', None)
+                if url and 'uainvest' in url:
+                    continue  # выбрасываем
+                clean_entities.append(ent)
+
+            # Из текста тоже убираем голые uainvest ссылки
+            raw = re.sub(r'https?://[^\s]*uainvest[^\s]*', '', raw)
+            raw = re.sub(r'\n{3,}', '\n\n', raw).strip()
+            raw = apply_word_replacements(raw)
+
+            # Добавляем биржевые ссылки
+            token = extract_token_from_first_line(raw)
+            exchanges = extract_exchanges_from_text(raw)
+            if token and exchanges:
+                links_str = build_exchange_links_for_text(token, exchanges)
+                await client.send_message(
+                    entity=TARGET_CHAT_ID,
+                    message=raw + '\n\n' + links_str,
+                    reply_to=destination_topic,
+                    file=event.media,
+                    parse_mode='html',
+                )
+            else:
+                await client.send_message(
+                    entity=TARGET_CHAT_ID,
+                    message=raw,
+                    formatting_entities=clean_entities,
+                    reply_to=destination_topic,
+                    file=event.media,
+                )
+            print("arbionalerts Funding — отправлено!")
+            return
+
+        # ---- Все остальные каналы ----
         text = event.raw_text or ""
 
         if text:
@@ -340,7 +431,6 @@ async def forward_message(event):
                 text = re.sub(r'https?://[^\s]+', '', text)
 
             text = text.replace('#', '')
-
             text = re.sub(r'^[\[\]\(\)]+$', '', text, flags=re.MULTILINE)
             text = re.sub(r'^[├└┌│─]+.*$', '', text, flags=re.MULTILINE)
             text = re.sub(r'^[\[\]└┌├│─]+$', '', text, flags=re.MULTILINE)
@@ -349,8 +439,7 @@ async def forward_message(event):
             text = text.strip()
             text = apply_word_replacements(text)
 
-        # Добавляем ссылку "Перейти" на биржу
-        exchange_link = build_exchange_link(sender, text)
+        exchange_link = build_single_exchange_link(sender, text)
         if exchange_link:
             text = text + '\n\n' + exchange_link
 
@@ -361,10 +450,10 @@ async def forward_message(event):
             file=event.media,
             parse_mode='html'
         )
-        print("Успешно очищено и отправлено!")
+        print("Отправлено!")
 
     except Exception as e:
-        print(f"Ошибка при отправке сообщения: {e}")
+        print(f"Ошибка: {e}")
 
 
 # ===================== Запуск =====================
@@ -383,9 +472,6 @@ async def main():
 
 
 if __name__ == '__main__':
-    # Запускаем telebot в отдельном потоке
     t = threading.Thread(target=run_telebot, daemon=True)
     t.start()
-
-    # Запускаем Telethon в основном потоке
     client.loop.run_until_complete(main())
